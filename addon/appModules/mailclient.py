@@ -7,46 +7,16 @@
 import addonHandler
 import api
 import appModuleHandler
-import bisect
 import config
 import controlTypes
-import ctypes
-import eventHandler
-import globalPluginHandler
-import gui
-import json
-import NVDAHelper
-from NVDAObjects.behaviors import RowWithFakeNavigation, Dialog, Notification
+from NVDAObjects.behaviors import RowWithFakeNavigation
 from NVDAObjects.UIA import UIA
-from NVDAObjects.window import winword
-import operator
-import re
-from speech import sayAll
-from scriptHandler import script, willSayAllResume
+from scriptHandler import script
 import speech
-import struct
-import textInfos
-import time
 import tones
 import ui
 import UIAHandler
 from UIAHandler.utils import createUIAMultiPropertyCondition
-import winUser
-import wx
-
-debug = False
-if debug:
-    f = open("C:\\Users\\tony\\Dropbox\\1.txt", "w", encoding="utf-8")
-def mylog(s):
-    if debug:
-        print(str(s), file=f)
-        f.flush()
-
-def myAssert(condition):
-    if not condition:
-        raise RuntimeError("Assertion failed")
-
-
 
 def printTree3(obj, level=10, indent=0):
     result = []
@@ -82,7 +52,7 @@ def getWindow(focus):
     return focus
 
 
-def     findDocument(window=None):
+def findDocument(window=None):
     if window is None:
         window = api.getForegroundObject()
     document = window.simpleFirstChild.simpleNext
@@ -135,8 +105,18 @@ def speakObject(document):
 
 class AppModule(appModuleHandler.AppModule):
     def chooseNVDAObjectOverlayClasses(self, obj, clsList):
-        if obj.role == controlTypes.ROLE_LISTITEM:
-            if obj.parent is not None and obj.parent.parent is not None and obj.parent.role == controlTypes.ROLE_TABLE:
+
+        isMessageRow = False
+        parent = obj.parent
+        if obj.role == controlTypes.Role.DATAITEM:
+
+            while parent:
+                if parent.role == controlTypes.Role.TABLE:
+                    isMessageRow = True
+                    break
+                parent = parent.parent
+
+            if isMessageRow:
                 clsList.insert(0, UIAGridRow)
 
     @script(description='Expand all messages in message view', gestures=['kb:NVDA+X'])
@@ -152,13 +132,10 @@ class AppModule(appModuleHandler.AppModule):
                 heading.obj.doAction()
         ui.message(_("Expanded%d messages") % len(headings))
 
-
 class UIAGridRow(RowWithFakeNavigation,UIA):
     # Translators: name of the column that denotes read status in the messages table
     readStatus = _("Read status")
-    shouldAllowUIAFocusEvent = True
-    def _get_name(self):
-        return ""
+    #shouldAllowUIAFocusEvent = True
 
     def getChildren(self, obj=None):
         if obj is None:
@@ -172,12 +149,19 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
         childrenCacheRequest.treeFilter=createUIAMultiPropertyCondition({UIAHandler.UIA_ControlTypePropertyId:[UIAHandler.UIA_TextControlTypeId,UIAHandler.UIA_ImageControlTypeId]})
         cachedChildren=obj.UIAElement.buildUpdatedCache(childrenCacheRequest).getCachedChildren()
         return  cachedChildren
-    def _get_value(self):
+
+    def _get_name(self):
         result = []
+
+        if controlTypes.State.EXPANDED in self.states:
+            result.append(controlTypes.State.EXPANDED.displayString)
+        elif controlTypes.State.COLLAPSED in self.states:
+            result.append(controlTypes.State.COLLAPSED.displayString)
+
         cachedChildren = self.getChildren()
         for index in range(cachedChildren.length):
             child = cachedChildren.getElement(index)
-            name = child.CachedName
+            name = child.cachedName
             if child.cachedControlType == UIAHandler.UIA_ImageControlTypeId:
                 # I adore the beauty of COM interfaces!
                 columnHeaderText = child.getCachedPropertyValueEx(UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,True).QueryInterface(UIAHandler.IUIAutomationElementArray).getElement(0).CurrentName
@@ -197,7 +181,18 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
                 result.append(name)
         return " ".join(result)
 
-        cachedChildren = self.getChildren()
+    value = None
+
+    @script(gestures=["kb:rightArrow"])
+    def script_rightArrow(self, gesture):
+        tones.beep(200, 50)
+
+    def _get_role(self):
+        role=super(UIAGridRow, self).role
+        if role==controlTypes.Role.DATAITEM:
+            role=controlTypes.Role.LISTITEM
+        return role
+
     def findNextUnread(self, direction, errorMsg):
         readStatusIndex = -1
         cachedChildren = self.getChildren()
@@ -229,6 +224,7 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
     @script(description='Find previous unread email', gestures=['kb:P'])
     def script_previousUnread(self, gesture):
         return self.findNextUnread(-1, _("No next previous email"))
+
     """
     def _get_previous(self):
         prev = super()._get_previous()
@@ -246,8 +242,6 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
             counter += 1
         return None
 
-
-
     def _get_next(self):
         next = super()._get_next()
         if next is not None:
@@ -264,6 +258,7 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
             counter  += 1
         return None
     """
+
     @script(description='Read current email message.', gestures=['kb:NVDA+DownArrow'])
     def script_readEmail(self, gesture):
         document = findSubDocument()
