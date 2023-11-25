@@ -9,7 +9,7 @@ import api
 import appModuleHandler
 import config
 import controlTypes
-from NVDAObjects.behaviors import RowWithFakeNavigation
+from NVDAObjects.behaviors import NVDAObject, RowWithFakeNavigation
 from NVDAObjects.UIA import UIA
 from scriptHandler import script
 import speech
@@ -17,6 +17,17 @@ import tones
 import ui
 import UIAHandler
 from UIAHandler.utils import createUIAMultiPropertyCondition
+
+COL_FLAG = 0
+COL_READ = 1
+COL_FROM = 3
+COL_SUBJECT = 4
+COL_RECEIVED = 5
+COL_SIZE = 6
+COL_FOLDER = 7
+COL_ATTACHMENT = 8
+
+addonHandler.initTranslation()
 
 def printTree3(obj, level=10, indent=0):
     result = []
@@ -159,29 +170,27 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
             result.append(controlTypes.State.COLLAPSED.displayString)
 
         cachedChildren = self.getChildren()
-        for index in range(cachedChildren.length):
-            child = cachedChildren.getElement(index)
-            name = child.cachedName
-            if child.cachedControlType == UIAHandler.UIA_ImageControlTypeId:
-                # I adore the beauty of COM interfaces!
-                columnHeaderText = child.getCachedPropertyValueEx(UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,True).QueryInterface(UIAHandler.IUIAutomationElementArray).getElement(0).CurrentName
-                if columnHeaderText == self.readStatus:
-                    if name == "False":
-                        result.append("Unread")
-                    elif name == "True":
-                        pass
-                    else:
-                        result.append(columnHeaderText + ": " + name)
-                elif name != "False":
-                    if name == "True":
-                        result.append(columnHeaderText)
-                    else:
-                        result.append(columnHeaderText + ": " + name)
+
+        for col in [COL_FLAG, COL_READ, COL_ATTACHMENT, COL_FROM, COL_SUBJECT, COL_RECEIVED, COL_SIZE, COL_FOLDER,]:
+            child = cachedChildren.getElement(col)
+
+            if (col == COL_FLAG or col == COL_ATTACHMENT):
+                if child.cachedName == "True":
+                    result.append(child.getCachedPropertyValueEx(UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,True).QueryInterface(UIAHandler.IUIAutomationElementArray).getElement(0).CurrentName)
+            elif col == COL_READ:
+                # translators: text indicating an unread mail, official translation from eM Client must be used here
+                t = _("Unread")
+                if child.cachedName == t:
+                    result.append(t)
             else:
-                result.append(name)
-        return " ".join(result)
+                result.append(child.getCachedPropertyValueEx(UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,True).QueryInterface(UIAHandler.IUIAutomationElementArray).getElement(0).CurrentName + ": " + child.cachedName)
+
+        return ", ".join(result)
 
     value = None
+
+    def reportFocus(self):
+        speech.speakText(self.name)
 
     @script(gestures=["kb:rightArrow"])
     def script_rightArrow(self, gesture):
