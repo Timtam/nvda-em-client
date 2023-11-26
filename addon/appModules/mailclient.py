@@ -117,18 +117,20 @@ def speakObject(document):
 class AppModule(appModuleHandler.AppModule):
     def chooseNVDAObjectOverlayClasses(self, obj, clsList):
 
-        isMessageRow = False
-        parent = obj.parent
-        if obj.role == controlTypes.Role.DATAITEM:
+        if isinstance(obj, UIA):
 
-            while parent:
-                if parent.role == controlTypes.Role.TABLE:
-                    isMessageRow = True
-                    break
-                parent = parent.parent
+            isMessageRow = False
+            parent = obj.parent
+            if obj.role == controlTypes.Role.DATAITEM:
 
-            if isMessageRow:
-                clsList.insert(0, UIAGridRow)
+                while parent:
+                    if parent.role == controlTypes.Role.TABLE:
+                        isMessageRow = True
+                        break
+                    parent = parent.parent
+
+                if isMessageRow:
+                    clsList.insert(0, UIAGridRow)
 
     @script(description='Expand all messages in message view', gestures=['kb:NVDA+X'])
     def script_expandMessages(self, gesture):
