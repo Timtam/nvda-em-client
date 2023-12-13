@@ -114,41 +114,7 @@ def speakObject(document):
 
     callback()
 
-class AppModule(appModuleHandler.AppModule):
-    def chooseNVDAObjectOverlayClasses(self, obj, clsList):
-
-        if isinstance(obj, UIA):
-
-            isMessageRow = False
-            parent = obj.parent
-            if obj.role == controlTypes.Role.DATAITEM:
-
-                while parent:
-                    if parent.role == controlTypes.Role.TABLE:
-                        isMessageRow = True
-                        break
-                    parent = parent.parent
-
-                if isMessageRow:
-                    clsList.insert(0, UIAGridRow)
-
-    @script(description='Expand all messages in message view', gestures=['kb:NVDA+X'])
-    def script_expandMessages(self, gesture):
-        focus = api.getFocusObject()
-        interceptor = focus.treeInterceptor
-        if interceptor is None:
-            ui.message(_("Not in message view!"))
-            return
-        headings = list(interceptor._iterNodesByType("heading2"))
-        for heading in headings:
-            if heading.obj.IA2Attributes.get('class', "") == "header header_gray":
-                heading.obj.doAction()
-        ui.message(_("Expanded%d messages") % len(headings))
-
-class UIAGridRow(RowWithFakeNavigation,UIA):
-    # Translators: name of the column that denotes read status in the messages table
-    readStatus = _("Read status")
-    #shouldAllowUIAFocusEvent = True
+class EmClientBase:
 
     def getChildren(self, obj=None):
         if obj is None:
@@ -163,6 +129,11 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
         cachedChildren=obj.UIAElement.buildUpdatedCache(childrenCacheRequest).getCachedChildren()
         return  cachedChildren
 
+
+class MailViewRow(RowWithFakeNavigation,UIA,EmClientBase):
+    # Translators: name of the column that denotes read status in the messages table
+    readStatus = _("Read status")
+
     def _get_name(self):
         result = []
 
@@ -172,6 +143,8 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
             result.append(controlTypes.State.COLLAPSED.displayString)
 
         cachedChildren = self.getChildren()
+
+        # TODO: folder column only exists in inboxes folder
 
         for col in [COL_FLAG, COL_READ, COL_ATTACHMENT, COL_FROM, COL_SUBJECT, COL_RECEIVED, COL_SIZE, COL_FOLDER,]:
             child = cachedChildren.getElement(col)
@@ -199,7 +172,7 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
         tones.beep(200, 50)
 
     def _get_role(self):
-        role=super(UIAGridRow, self).role
+        role=super(MailViewRow, self).role
         if role==controlTypes.Role.DATAITEM:
             role=controlTypes.Role.LISTITEM
         return role
@@ -275,3 +248,64 @@ class UIAGridRow(RowWithFakeNavigation,UIA):
         document = findSubDocument()
         speakObject(document)
 
+
+class SettingsViewRow(RowWithFakeNavigation,UIA,EmClientBase):
+
+    def _get_name(self):
+        result = []
+
+        if controlTypes.State.EXPANDED in self.states:
+            result.append(controlTypes.State.EXPANDED.displayString)
+        elif controlTypes.State.COLLAPSED in self.states:
+            result.append(controlTypes.State.COLLAPSED.displayString)
+
+        result.append(super(SettingsViewRow, self)._get_name())
+
+        return ", ".join(result)
+
+    value = None
+
+    def reportFocus(self):
+        speech.speakText(self.name)
+
+    def _get_role(self):
+        role=super(SettingsViewRow, self).role
+        if role==controlTypes.Role.DATAITEM:
+            role=controlTypes.Role.LISTITEM
+        return role
+
+
+class AppModule(appModuleHandler.AppModule):
+
+    def chooseNVDAObjectOverlayClasses(self, obj, clsList):
+
+        def checkParent(obj, level, uiaAutomationId):
+            current = 0
+            
+            while obj.parent and current < level:
+                obj = obj.parent
+                current += 1
+                
+            if current < level:
+                return False
+            return obj.UIAAutomationId == uiaAutomationId
+
+        if isinstance(obj, UIA):
+            if obj.role == controlTypes.Role.DATAITEM:
+                if checkParent(obj, 2, "dataGridCategory"):
+                    clsList.insert(0, SettingsViewRow)
+                elif checkParent(obj, 2, "controlDataGrid"):
+                    clsList.insert(0, MailViewRow)
+
+    @script(description='Expand all messages in message view', gestures=['kb:NVDA+X'])
+    def script_expandMessages(self, gesture):
+        focus = api.getFocusObject()
+        interceptor = focus.treeInterceptor
+        if interceptor is None:
+            ui.message(_("Not in message view!"))
+            return
+        headings = list(interceptor._iterNodesByType("heading2"))
+        for heading in headings:
+            if heading.obj.IA2Attributes.get('class', "") == "header header_gray":
+                heading.obj.doAction()
+        ui.message(_("Expanded%d messages") % len(headings))
