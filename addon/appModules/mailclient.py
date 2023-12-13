@@ -315,7 +315,11 @@ class AppModule(appModuleHandler.AppModule):
                 
             if current < level:
                 return False
-            return obj.UIAAutomationId == uiaAutomationId
+
+            try:
+                return obj.UIAAutomationId == uiaAutomationId
+            except AttributeError:
+                return False
 
         if isinstance(obj, UIA):
             if obj.role == controlTypes.Role.DATAITEM:
