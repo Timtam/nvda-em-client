@@ -8,6 +8,7 @@ import addonHandler
 import api
 import appModuleHandler
 import config
+from collections import defaultdict
 import controlTypes
 from NVDAObjects.behaviors import NVDAObject, RowWithFakeNavigation
 from NVDAObjects.UIA import UIA
@@ -18,16 +19,29 @@ import ui
 import UIAHandler
 from UIAHandler.utils import createUIAMultiPropertyCondition
 
-COL_FLAG = 0
-COL_READ = 1
-COL_FROM = 3
-COL_SUBJECT = 4
-COL_RECEIVED = 5
-COL_SIZE = 6
-COL_FOLDER = 7
-COL_ATTACHMENT = 8
-
 addonHandler.initTranslation()
+
+# Translators: corresponding column in Em Client
+COL_READ_STATUS = _("Read status")
+# Translators: corresponding column in Em Client
+COL_FLAG = _("Flag")
+# Translators: corresponding column in Em Client
+COL_FROM = _("From")
+# Translators: corresponding column in Em Client
+COL_SUBJECT = _("Subject")
+# Translators: corresponding column in Em Client
+COL_RECEIVED = _("Received")
+# Translators: corresponding column in Em Client
+COL_SIZE = _("Size")
+# Translators: corresponding column in Em Client
+COL_MAIL_FOLDER = _("Mail Folder")
+# Translators: corresponding column in Em Client
+COL_ATTACHMENT = _("Attachment")
+# Translators: corresponding column in Em Client
+COL_ACCOUNT_ICON = _("Account Icon")
+# Translators: corresponding column in Em Client
+COL_DELETE = _("Delete")
+
 
 def printTree3(obj, level=10, indent=0):
     result = []
@@ -131,10 +145,9 @@ class EmClientBase:
 
 
 class MailViewRow(RowWithFakeNavigation,UIA,EmClientBase):
-    # Translators: name of the column that denotes read status in the messages table
-    readStatus = _("Read status")
 
-    def _get_name(self):
+    def composeName(self):
+
         result = []
 
         if controlTypes.State.EXPANDED in self.states:
@@ -144,23 +157,37 @@ class MailViewRow(RowWithFakeNavigation,UIA,EmClientBase):
 
         cachedChildren = self.getChildren()
 
-        # TODO: folder column only exists in inboxes folder
+        for i in range(cachedChildren.length):
+            child = cachedChildren.getElement(i)
 
-        for col in [COL_FLAG, COL_READ, COL_ATTACHMENT, COL_FROM, COL_SUBJECT, COL_RECEIVED, COL_SIZE, COL_FOLDER,]:
-            child = cachedChildren.getElement(col)
+            if child.cachedName == '':
+                continue
 
-            if (col == COL_FLAG or col == COL_ATTACHMENT):
-                if child.cachedName == "True":
-                    result.append(child.getCachedPropertyValueEx(UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,True).QueryInterface(UIAHandler.IUIAutomationElementArray).getElement(0).CurrentName)
-            elif col == COL_READ:
+            headerText = child.getCachedPropertyValueEx(UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,True).QueryInterface(UIAHandler.IUIAutomationElementArray).getElement(0).CurrentName
+
+            if headerText == COL_READ_STATUS:
                 # translators: text indicating an unread mail, official translation from eM Client must be used here
                 t = _("Unread")
                 if child.cachedName == t:
                     result.append(t)
+                else:
+                    continue
             else:
-                result.append(child.getCachedPropertyValueEx(UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,True).QueryInterface(UIAHandler.IUIAutomationElementArray).getElement(0).CurrentName + ": " + child.cachedName)
+                if child.cachedName == "True":
+                    result.append(headerText)
+                elif child.cachedName == 'False':
+                    continue
+                else:
+                    result.append(headerText + ": " + child.cachedName)
 
         return ", ".join(result)
+
+    def _get_name(self):
+
+        if not hasattr(self, '_custom_name'):
+            self._custom_name = self.composeName()
+
+        return self._custom_name
 
     value = None
 
