@@ -302,6 +302,11 @@ class SettingsViewRow(RowWithFakeNavigation,UIA,EmClientBase):
         return role
 
 
+class MenuItem(UIA):
+
+    description = ''
+
+
 class AppModule(appModuleHandler.AppModule):
 
     def chooseNVDAObjectOverlayClasses(self, obj, clsList):
@@ -327,6 +332,8 @@ class AppModule(appModuleHandler.AppModule):
                     clsList.insert(0, SettingsViewRow)
                 elif checkParent(obj, 2, "controlDataGrid"):
                     clsList.insert(0, MailViewRow)
+            elif obj.role == controlTypes.Role.MENUITEM or (obj.role == controlTypes.Role.PANE and obj.parent.role == controlTypes.Role.POPUPMENU):
+                clsList.insert(0, MenuItem)
 
     @script(description='Expand all messages in message view', gestures=['kb:NVDA+X'])
     def script_expandMessages(self, gesture):
